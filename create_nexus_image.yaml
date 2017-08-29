@@ -1,0 +1,66 @@
+- name: Create and configure EC2 instances to be used as AMIs
+  hosts: localhost
+  connection: local
+  gather_facts: False
+  become: False
+  tasks:
+  - include: tasks/create_image.yaml
+
+  - name: Wait for SSH to come up
+    local_action: wait_for
+                  host={{ item.public_ip }}
+                  port=22
+                  delay=60 timeout=320
+                  state=started
+    with_items: "{{ created_instance.instances }}"
+
+  - name: Add all instance public IPs to host group
+    add_host: hostname={{ item.public_ip }} groups=ec2hosts
+    with_items: "{{ created_instance.instances }}"
+
+- name: Wait for boot completion
+  hosts: ec2hosts
+  become: yes
+  user: ec2-user
+  gather_facts: true
+  tasks:
+    - name: Wait for boot completion
+      raw: test -f /var/lib/cloud/instance/boot-finished
+      retries: 30
+      register: cmd_res
+      changed_when: false
+      until: cmd_res | success
+
+- name: Set up nexus
+  hosts: ec2hosts
+  become: yes
+  user: ec2-user
+  gather_facts: true
+  vars:
+    nexus_version: '3.1.0-04'
+    nexus_timezone: 'Canada/Eastern'
+    nexus_scheduled_tasks: []
+    nexus_anonymous_access: true
+    nexus_data_dir: /data/nexus
+  roles:
+    - role: ansiblebit.oracle-java
+      oracle_java_set_as_default: yes
+    - role: savoirfairelinux.nexus3-oss
+
+- name: Disable systemd service
+  hosts: ec2hosts
+  become: yes
+  user: ec2-user
+  gather_facts: true
+  tasks:
+    - name: Disable systemd service
+      shell: 'systemctl disable nexus.service'
+
+- name: Register ami and delete instance
+  hosts: localhost
+  connection: local
+  gather_facts: False
+  become: False
+  tasks:
+  - include: tasks/register_ami.yaml
+  - include: tasks/delete_image.yaml

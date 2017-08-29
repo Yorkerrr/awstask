@@ -1,0 +1,515 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "vb Nexus",
+  "Parameters": {
+    "CustomerCIDR": {
+      "Type": "String",
+      "Description": "IP Address range for customer network",
+      "MinLength": "9",
+      "MaxLength": "18",
+      "Default": "172.16.0.0/16",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "must be a valid IP CIDR range of the form x.x.x.x/x."
+    },
+    "CustomerVPNAddress": {
+      "Type": "String",
+      "Description": "IP Address of Customer VPN device",
+      "MinLength": "7",
+      "MaxLength": "15",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})",
+      "ConstraintDescription": "must be a valid IP address of the form x.x.x.x"
+    },
+    "ImageId": {
+      "Type": "String",
+      "Default": "ami-15cbe870",
+      "Description": "Image ID of Nexus",
+      "ConstraintDescription": "Image"
+    },
+    "InstanceType": {
+      "Description": "WebServer EC2 instance type",
+      "Type": "String",
+      "Default": "t2.medium",
+      "AllowedValues": [
+        "t2.small",
+        "t2.medium",
+        "t2.large"
+      ],
+      "ConstraintDescription": "must be a valid EC2 instance type."
+    },
+    "KeyName": {
+      "Description": "The EC2 Key Pair to allow SSH access to the instances",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "ConstraintDescription": "must be the name of an existing EC2 KeyPair."
+    }
+  },
+  "Mappings": {
+    "SubnetConfig": {
+      "VPC": {
+        "CIDR": "10.0.0.0/16"
+      },
+      "SubnetA": {
+        "CIDR": "10.0.0.0/24"
+      },
+      "SubnetB": {
+        "CIDR": "10.0.1.0/24"
+      }
+    }
+  },
+  "Resources": {
+    "MountTarget1": {
+      "Type": "AWS::EFS::MountTarget",
+      "Properties": {
+        "FileSystemId": {
+          "Ref": "EFS"
+        },
+        "SubnetId": {
+          "Ref": "SubnetA"
+        },
+        "SecurityGroups": [
+          {
+            "Ref": "EFSSecurityGroup"
+          }
+        ]
+      }
+    },
+    "MountTarget2": {
+      "Type": "AWS::EFS::MountTarget",
+      "Properties": {
+        "FileSystemId": {
+          "Ref": "EFS"
+        },
+        "SubnetId": {
+          "Ref": "SubnetB"
+        },
+        "SecurityGroups": [
+          {
+            "Ref": "EFSSecurityGroup"
+          }
+        ]
+      }
+    },
+    "EFSSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Enable SSH access and HTTP from the load balancer only",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "2049",
+            "ToPort": "2049",
+            "SourceSecurityGroupId": {
+              "Ref": "NexusSecurityGroup"
+            }
+          }
+        ],
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "VPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": {
+          "Fn::FindInMap": [
+            "SubnetConfig",
+            "VPC",
+            "CIDR"
+          ]
+        },
+        "EnableDnsSupport": "true",
+        "EnableDnsHostnames": "true"
+      }
+    },
+    "SubnetA": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "CidrBlock": {
+          "Fn::FindInMap": [
+            "SubnetConfig",
+            "SubnetA",
+            "CIDR"
+          ]
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            0,
+            {
+              "Fn::GetAZs": ""
+            }
+          ]
+        }
+      }
+    },
+    "SubnetB": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "CidrBlock": {
+          "Fn::FindInMap": [
+            "SubnetConfig",
+            "SubnetB",
+            "CIDR"
+          ]
+        },
+        "AvailabilityZone": {
+          "Fn::Select": [
+            1,
+            {
+              "Fn::GetAZs": ""
+            }
+          ]
+        }
+      }
+    },
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway"
+    },
+    "VPNGateway": {
+      "Type": "AWS::EC2::VPNGateway",
+      "Properties": {
+        "Type": "ipsec.1"
+      }
+    },
+    "VPNGatewayAttachment": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "VpnGatewayId": {
+          "Ref": "VPNGateway"
+        }
+      }
+    },
+    "CustomerGateway": {
+      "Type": "AWS::EC2::CustomerGateway",
+      "Properties": {
+        "Type": "ipsec.1",
+        "BgpAsn": "65000",
+        "IpAddress": {
+          "Ref": "CustomerVPNAddress"
+        }
+      }
+    },
+    "VPNConnection": {
+      "Type": "AWS::EC2::VPNConnection",
+      "Properties": {
+        "Type": "ipsec.1",
+        "StaticRoutesOnly": "true",
+        "CustomerGatewayId": {
+          "Ref": "CustomerGateway"
+        },
+        "VpnGatewayId": {
+          "Ref": "VPNGateway"
+        }
+      }
+    },
+    "GatewayToInternet": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "InternetGatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "VPNConnectionRoute": {
+      "Type": "AWS::EC2::VPNConnectionRoute",
+      "Properties": {
+        "VpnConnectionId": {
+          "Ref": "VPNConnection"
+        },
+        "DestinationCidrBlock": {
+          "Ref": "CustomerCIDR"
+        }
+      }
+    },
+    "RouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "Route2Internet": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "GatewayToInternet",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "RouteTable"
+        },
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "GatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "VPNRoute": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "VPNGatewayAttachment",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "RouteTable"
+        },
+        "DestinationCidrBlock": {
+          "Ref": "CustomerCIDR"
+        },
+        "GatewayId": {
+          "Ref": "VPNGateway"
+        }
+      }
+    },
+    "SubnetARouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "SubnetA"
+        },
+        "RouteTableId": {
+          "Ref": "RouteTable"
+        }
+      }
+    },
+    "SubnetBRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "SubnetB"
+        },
+        "RouteTableId": {
+          "Ref": "RouteTable"
+        }
+      }
+    },
+    "ApplicationLoadBalancer": {
+      "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+      "Properties": {
+        "Scheme": "internal",
+        "Subnets": [
+          {
+            "Ref": "SubnetA"
+          },
+          {
+            "Ref": "SubnetB"
+          }
+        ],
+        "SecurityGroups": [
+          {
+            "Ref": "ApplicationLoadBalancerSecurityGroup"
+          }
+        ]
+      }
+    },
+    "ALBListener": {
+      "Type": "AWS::ElasticLoadBalancingV2::Listener",
+      "Properties": {
+        "DefaultActions": [
+          {
+            "Type": "forward",
+            "TargetGroupArn": {
+              "Ref": "ALBTargetGroup"
+            }
+          }
+        ],
+        "LoadBalancerArn": {
+          "Ref": "ApplicationLoadBalancer"
+        },
+        "Port": "80",
+        "Protocol": "HTTP"
+      }
+    },
+    "ALBTargetGroup": {
+      "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "Properties": {
+        "HealthCheckIntervalSeconds": 20,
+        "HealthCheckTimeoutSeconds": 15,
+        "HealthyThresholdCount": 3,
+        "Port": 8081,
+        "Protocol": "HTTP",
+        "UnhealthyThresholdCount": 5,
+        "VpcId": {
+          "Ref": "VPC"
+        }
+      }
+    },
+    "ApplicationLoadBalancerSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "ELB Security Group with HTTP access on port 80 from private network",
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "80",
+            "ToPort": "80",
+            "CidrIp": {
+              "Ref": "CustomerCIDR"
+            }
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "8081",
+            "ToPort": "8081",
+            "CidrIp": {
+              "Fn::FindInMap": [
+                "SubnetConfig",
+                "VPC",
+                "CIDR"
+              ]
+            }
+          }
+        ],
+        "SecurityGroupEgress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "80",
+            "ToPort": "80",
+            "CidrIp": {
+              "Ref": "CustomerCIDR"
+            }
+          }
+        ]
+      }
+    },
+    "NexusASGroup": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "DependsOn": [
+        "Route2Internet",
+        "MountTarget1",
+        "MountTarget2"
+      ],
+      "Properties": {
+        "HealthCheckType": "ELB",
+        "HealthCheckGracePeriod": 300,
+        "VPCZoneIdentifier": [
+          {
+            "Ref": "SubnetA"
+          },
+          {
+            "Ref": "SubnetB"
+          }
+        ],
+        "LaunchConfigurationName": {
+          "Ref": "NexusLaunchConfig"
+        },
+        "MinSize": "1",
+        "MaxSize": "2",
+        "DesiredCapacity": "1",
+        "TargetGroupARNs": [
+          {
+            "Ref": "ALBTargetGroup"
+          }
+        ]
+      }
+    },
+    "NexusLaunchConfig": {
+      "Type": "AWS::AutoScaling::LaunchConfiguration",
+      "Metadata": {
+        "Comment": "Install a simple application",
+        "AWS::CloudFormation::Init": {
+          "config": {}
+        }
+      },
+      "Properties": {
+        "KeyName": {
+          "Ref": "KeyName"
+        },
+        "ImageId": {
+          "Ref": "ImageId"
+        },
+        "SecurityGroups": [
+          {
+            "Ref": "NexusSecurityGroup"
+          }
+        ],
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash\n",
+                "yum install -y nfs-utils\n",
+                "EFS_ID=",
+                {
+                  "Ref": "EFS"
+                },
+                "\n",
+                "EFS_REGION=",
+                {
+                  "Ref": "AWS::Region"
+                },
+                "\n",
+                "TMP_DIR=/tmp/nexus.bak\n",
+                "EFS_MOUNT_DIR=/data/nexus\n",
+                "mkdir -p ${TMP_DIR}\n",
+                "cp -rf $EFS_MOUNT_DIR/* ${TMP_DIR}/\n",
+                "echo $(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone).${EFS_ID}.efs.${EFS_REGION}.amazonaws.com:/ ${EFS_MOUNT_DIR} nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 >> /etc/fstab\n",
+                "mount ${EFS_MOUNT_DIR}\n",
+                "[ \"$(ls -A $EFS_MOUNT_DIR)\" ] || cp -rf ${TMP_DIR}/* $EFS_MOUNT_DIR/\n",
+                "chown -R nexus:nexus ${EFS_MOUNT_DIR}\n",
+                "systemctl start nexus.service\n",
+                "\n"
+              ]
+            ]
+          }
+        }
+      }
+    },
+    "EFS": {
+      "Type": "AWS::EFS::FileSystem",
+    },
+    "NexusSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "Allow access from load balancer and bastion as well as outbound HTTP and HTTPS traffic",
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "8081",
+            "ToPort": "8081",
+            "SourceSecurityGroupId": {
+              "Ref": "ApplicationLoadBalancerSecurityGroup"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "URL": {
+      "Description": "The URL of the website",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [
+            "http://",
+            {
+              "Fn::GetAtt": [
+                "ApplicationLoadBalancer",
+                "DNSName"
+              ]
+            },
+            "/"
+          ]
+        ]
+      }
+    }
+  }
+}

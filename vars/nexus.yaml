@@ -1,0 +1,7 @@
+---
+key_name: "vburak"
+instance_type: "t2.medium"
+image_id: "ami-15cbe870"
+customer_vpn_addr: "11.11.11.11"
+customer_vpn_cidr: "172.16.0.0/16"
+private: true

@@ -1,0 +1,16 @@
+- name: Launch private nexus stack
+  cloudformation:
+    stack_name: "{{stack_name}}"
+    state: "present"
+    region: "{{aws_region}}"
+    template: "files/private_nexus_stack.json"
+    template_parameters:
+      KeyName: "{{key_name}}"
+      InstanceType: "{{instance_type}}"
+      ImageId: "{{image_id}}"
+      CustomerVPNAddress: "{{customer_vpn_addr}}"
+      CustomerCIDR: "{{customer_vpn_cidr}}"
+    tags:
+      Stack: "nexus"
+  register: stack_result
+- debug: var=stack_result.stack_outputs

@@ -1,0 +1,8 @@
+---
+- name: Delete EC2 image
+  local_action:
+    module: ec2
+    state: 'absent'
+    instance_ids: '{{ created_instance.instance_ids }}'
+    region: "{{aws_region}}"
+    zone: "{{aws_zone}}"

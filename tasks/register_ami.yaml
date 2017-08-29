@@ -1,0 +1,9 @@
+- name: Register AMI for front-end web servers
+  local_action:
+    module: ec2_ami
+    region: "{{aws_region}}"
+    instance_id: "{{ created_instance.instance_ids[0] }}"
+    name: "nexus-{{ created_instance.instance_ids[0] }}"
+    description: "Created_ami"
+    wait: yes
+  register: created_ami

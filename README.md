@@ -1,0 +1,2 @@
+ansible-playbook -i ec2.py create_nexus_image.yaml --private-key=vburak.pem --extra-vars "ami_id=ami-cfdafaaa aws_region=us-east-2 aws_zone=us-east-2a key_name=vburak ec2_tag_Name=vburak"
+ansible-playbook start_nexus_stack.yaml --extra-vars "stack_name=aug28public3 aws_region=us-east-2 private=false"

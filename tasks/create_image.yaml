@@ -1,0 +1,19 @@
+---
+- name: Create EC2 image
+  local_action:
+    module: ec2
+    key_name: "{{key_name}}"
+    instance_type: t2.medium
+    image: "{{ami_id}}"
+    region: "{{aws_region}}"
+    zone: "{{aws_zone}}"
+    instance_tags:
+      Name: "{{ec2_tag_Name}}"
+    group:
+    - open_ssh
+    - allow_8081
+    wait: yes
+  register: created_instance
+
+- debug: var=item
+  with_items: "{{ created_instance.instance_ids }}"
