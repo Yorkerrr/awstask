@@ -17,3 +17,13 @@ ansible-playbook start_nexus_stack.yaml --extra-vars "stack_name=<stack_name> aw
 ```bash
 ansible-playbook start_nexus_stack.yaml --extra-vars "stack_name=<stack_name> aws_region=us-east-2 private=false"
 ```
+
+Full list of extra vars with defaults:
+
+- key_name: "vburak"
+- instance_type: "t2.medium"
+- image_id: "ami-15cbe870"
+- customer_vpn_addr: "11.11.11.11" (works with private=true only)
+- customer_vpn_cidr: "172.16.0.0/16" (works with private=true only)
+- private: true
+
